@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Royal Stopwatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Jost:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f2f3f5;
+    --text: #1d2433;
+    --muted: #7b8290;
+    --line: rgba(0,0,0,0.08);
+    --navy: #22406f;
+    --best: #2f9a63;
+    --worst: #c8483d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218;
+      --text: #e9ebef;
+      --muted: #8a919c;
+      --line: rgba(255,255,255,0.08);
+      --best: #7fd3a8;
+      --worst: #e8837a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Jost", "Segoe UI", "Malgun Gothic", sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 48px;
+  }
+  .wrap { width: 100%; max-width: 440px; }
+  svg.watch {
+    width: 100%;
+    height: auto;
+    display: block;
+    filter: drop-shadow(0 22px 28px rgba(0,0,0,0.35));
+    user-select: none;
+  }
+  .hand { transform-box: view-box; transform-origin: 200px 200px; }
+  .flyback #secHand { transition: transform .45s cubic-bezier(.3,1.4,.5,1); }
+  #crown { cursor: pointer; }
+  #crown .cap { transition: transform .08s; }
+  #crown.pressed .cap { transform: translateX(-4px); }
+
+  .readout {
+    text-align: center;
+    font-weight: 300;
+    font-size: clamp(38px, 11vw, 54px);
+    letter-spacing: 2px;
+    font-variant-numeric: tabular-nums;
+    margin: 22px 0 4px;
+  }
+  .label {
+    text-align: center;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    letter-spacing: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .buttons { display: flex; gap: 14px; margin: 24px 0 26px; }
+  .buttons button {
+    flex: 1;
+    height: 52px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.15);
+    background: linear-gradient(180deg, #f4f5f7 0%, #c9cdd3 100%);
+    color: #1d2433;
+    font-family: "Jost", sans-serif;
+    font-size: 14px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 1px 2px rgba(0,0,0,0.15);
+  }
+  .buttons button.primary {
+    background: linear-gradient(180deg, #34588f 0%, #1c3360 100%);
+    border-color: #1c3360;
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .buttons button:disabled { opacity: .4; cursor: default; }
+  ul { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+  li {
+    display: flex; justify-content: space-between;
+    padding: 12px 6px;
+    border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+    font-size: 16px;
+    font-weight: 300;
+    letter-spacing: 1px;
+  }
+  li .n { color: var(--muted); letter-spacing: 3px; font-size: 13px; }
+  li.best { color: var(--best); }
+  li.worst { color: var(--worst); }
+  .hint { text-align: center; color: var(--muted); font-size: 12px; letter-spacing: 1px; margin-top: 22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <svg class="watch" id="watch" viewBox="-10 -95 430 590" aria-label="스탑워치 시계">
+    <defs>
+      <!-- 폴리시드 스틸 -->
+      <linearGradient id="polish" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset=".3" stop-color="#9da3ab"/>
+        <stop offset=".55" stop-color="#f4f5f7"/>
+        <stop offset=".8" stop-color="#868c94"/>
+        <stop offset="1" stop-color="#e3e5e8"/>
+      </linearGradient>
+      <!-- 브러시드 스틸 -->
+      <linearGradient id="polishV" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset=".45" stop-color="#b8bdc4"/>
+        <stop offset="1" stop-color="#eef0f2"/>
+      </linearGradient>
+      <linearGradient id="brushed" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#a9aeb5"/>
+        <stop offset=".3" stop-color="#d9dce0"/>
+        <stop offset=".5" stop-color="#eceef0"/>
+        <stop offset=".7" stop-color="#d4d7db"/>
+        <stop offset="1" stop-color="#a3a8af"/>
+      </linearGradient>
+      <linearGradient id="brushedV" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#e9ebee"/>
+        <stop offset=".5" stop-color="#c3c7cc"/>
+        <stop offset="1" stop-color="#e2e4e7"/>
+      </linearGradient>
+      <pattern id="brushLines" width="4" height="1.4" patternUnits="userSpaceOnUse">
+        <rect width="4" height=".5" fill="#ffffff" opacity=".18"/>
+      </pattern>
+      <!-- 그랑 타피스리 -->
+      <linearGradient id="tapG" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#4a6fa8"/>
+        <stop offset=".55" stop-color="#2a4a80"/>
+        <stop offset="1" stop-color="#1a3060"/>
+      </linearGradient>
+      <pattern id="tap" width="10" height="10" patternUnits="userSpaceOnUse" x="195" y="195">
+        <rect width="10" height="10" fill="#0f1f42"/>
+        <rect x="1.1" y="1.1" width="7.8" height="7.8" fill="url(#tapG)"/>
+      </pattern>
+      <radialGradient id="sheen" cx=".3" cy=".25" r=".85">
+        <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
+        <stop offset=".45" stop-color="#fff" stop-opacity="0"/>
+        <stop offset="1" stop-color="#000" stop-opacity=".35"/>
+      </radialGradient>
+      <linearGradient id="white" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset=".5" stop-color="#b4bac3"/>
+        <stop offset="1" stop-color="#f2f4f6"/>
+      </linearGradient>
+    </defs>
+
+    <!-- 일체형 브레이슬릿 -->
+    <g id="bracelet"></g>
+
+    <!-- 케이스 -->
+    <ellipse cx="200" cy="200" rx="192" ry="186" fill="url(#brushed)" stroke="#8a9098" stroke-width="1.2"/>
+    <ellipse cx="200" cy="200" rx="192" ry="186" fill="url(#brushLines)"/>
+
+    <!-- 크라운 (클릭 = 시작/정지) -->
+    <g id="crown"></g>
+
+    <!-- 팔각 베젤: 폴리시드 챔퍼 + 브러시드 상판 -->
+    <polygon id="bezelOuter" fill="url(#polish)" stroke="#7d838b" stroke-width="1" stroke-linejoin="round"/>
+    <polygon id="bezelTop" fill="url(#brushedV)" stroke="#ffffff" stroke-opacity=".7" stroke-width="1" stroke-linejoin="round"/>
+    <polygon id="bezelTopLines" fill="url(#brushLines)"/>
+    <polygon id="bezelInner" fill="url(#polish)" stroke-linejoin="round"/>
+    <g id="screws"></g>
+
+    <!-- 플랜지 (미닛 트랙) -->
+    <circle cx="200" cy="200" r="138" fill="#5d6673"/>
+    <circle cx="200" cy="200" r="136.5" fill="#1a2c50"/>
+    <g id="flange"></g>
+
+    <!-- 다이얼 -->
+    <circle cx="200" cy="200" r="122" fill="url(#tap)"/>
+    <g id="indices"></g>
+
+    <!-- 날짜창 (3시) -->
+    <rect x="281" y="191" width="22" height="18" rx="1" fill="url(#white)"/>
+    <rect x="283" y="193" width="18" height="14" fill="#ffffff"/>
+    <text id="date" x="292" y="204.5" text-anchor="middle" fill="#1b1e24" font-family="Jost, sans-serif" font-size="10.5" font-weight="400">1</text>
+
+    <text x="200" y="285" text-anchor="middle" fill="#e9ecf2" font-family="Jost, sans-serif" font-size="6.5" letter-spacing="2.5">AUTOMATIC</text>
+
+    <!-- 시침 / 분침 (현재 시각) -->
+    <g class="hand" id="hourHand">
+      <path d="M195,212 L195,135 L200,127 L205,135 L205,212 Z" fill="url(#white)" stroke="#5f6773" stroke-width=".5"/>
+      <rect x="197.6" y="138" width="4.8" height="54" fill="#eef4e6"/>
+    </g>
+    <g class="hand" id="minHand">
+      <path d="M196.2,214 L196.2,96 L200,88 L203.8,96 L203.8,214 Z" fill="url(#white)" stroke="#5f6773" stroke-width=".5"/>
+      <rect x="198.3" y="98" width="3.4" height="94" fill="#eef4e6"/>
+    </g>
+    <!-- 초침 = 스탑워치 초 -->
+    <g class="hand" id="secHand">
+      <rect x="199.35" y="76" width="1.3" height="160" fill="#f4f6f8"/>
+      <rect x="197.8" y="94" width="4.4" height="12" rx="1" fill="#eef4e6" stroke="#cfd5dc" stroke-width=".4"/>
+      <rect x="198" y="214" width="4" height="22" rx="1.5" fill="#f4f6f8"/>
+    </g>
+    <circle cx="200" cy="200" r="4.5" fill="url(#white)" stroke="#5f6773" stroke-width=".5"/>
+    <circle cx="200" cy="200" r="1.5" fill="#7b838e"/>
+
+    <!-- 사파이어 글라스 반사 -->
+    <circle cx="200" cy="200" r="137" fill="url(#sheen)" pointer-events="none"/>
+  </svg>
+
+  <div class="readout" id="display">00:00.00</div>
+  <div class="label">Stopwatch</div>
+
+  <div class="buttons">
+    <button id="lapBtn" disabled>Lap</button>
+    <button id="startBtn" class="primary">Start</button>
+  </div>
+  <ul id="laps"></ul>
+  <p class="hint">Space 시작/정지 · L 랩 · R 재설정 · 크라운 클릭 = 시작/정지</p>
+</div>
+
+<script>
+  const NS = 'http://www.w3.org/2000/svg';
+  const C = 200;
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const pt = (deg, r, cx = C, cy = C) => {
+    const a = deg * Math.PI / 180;
+    return [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  };
+
+  // ---- 브레이슬릿: 위아래로 점점 좁아지는 링크 ----
+  const bracelet = document.getElementById('bracelet');
+  function links(dir) {
+    // 케이스와 이어지는 첫 링크
+    const y0 = dir < 0 ? 40 : 360;
+    const yEnd = dir < 0 ? -95 : 495;
+    el('path', { d: `M96,${y0} L304,${y0} L296,${y0 + dir * 46} L104,${y0 + dir * 46} Z`, fill: 'url(#brushed)', stroke: '#8a9098', 'stroke-width': 1 }, bracelet);
+    let y = y0 + dir * 46, w = 188;
+    while (dir < 0 ? y > yEnd : y < yEnd) {
+      const h = 30;
+      const ny = y + dir * h;
+      const nw = w - 6;
+      const top = Math.min(y, ny), bot = Math.max(y, ny);
+      const wt = dir < 0 ? nw : w, wb = dir < 0 ? w : nw;
+      const cwT = wt * 0.22, cwB = wb * 0.22;
+      // 바깥 링크 (브러시드)
+      el('path', { d: `M${C - wt / 2},${top + 1} L${C - cwT / 2 - 2},${top + 1} L${C - cwB / 2 - 2},${bot - 1} L${C - wb / 2},${bot - 1} Z`, fill: 'url(#brushed)', stroke: '#8a9098', 'stroke-width': .8 }, bracelet);
+      el('path', { d: `M${C + cwT / 2 + 2},${top + 1} L${C + wt / 2},${top + 1} L${C + wb / 2},${bot - 1} L${C + cwB / 2 + 2},${bot - 1} Z`, fill: 'url(#brushed)', stroke: '#8a9098', 'stroke-width': .8 }, bracelet);
+      // 가운데 링크 (폴리시드)
+      el('path', { d: `M${C - cwT / 2},${top + 4} L${C + cwT / 2},${top + 4} L${C + cwB / 2},${bot - 4} L${C - cwB / 2},${bot - 4} Z`, fill: 'url(#polishV)', stroke: '#7d838b', 'stroke-width': .6 }, bracelet);
+      y = ny; w = nw;
+    }
+  }
+  links(-1);
+  links(1);
+
+  // ---- 크라운 ----
+  const crown = document.getElementById('crown');
+  el('rect', { x: 386, y: 187, width: 14, height: 26, fill: '#9aa0a8' }, crown);
+  const cap = el('g', { class: 'cap' }, crown);
+  el('rect', { x: 396, y: 181, width: 15, height: 38, rx: 3, fill: 'url(#polish)', stroke: '#6f757d', 'stroke-width': .8 }, cap);
+  for (let y = 185; y < 217; y += 2.6) el('line', { x1: 398, y1: y, x2: 409, y2: y, stroke: '#7d838b', 'stroke-width': .5 }, cap);
+
+  // ---- 팔각 베젤 + 육각 스크류 ----
+  const oct = r => [...Array(8)].map((_, i) => pt(22.5 + i * 45, r).join(',')).join(' ');
+  document.getElementById('bezelOuter').setAttribute('points', oct(176));
+  document.getElementById('bezelTop').setAttribute('points', oct(170));
+  document.getElementById('bezelTopLines').setAttribute('points', oct(170));
+  document.getElementById('bezelInner').setAttribute('points', oct(152));
+  const screws = document.getElementById('screws');
+  for (let i = 0; i < 8; i++) {
+    const deg = 22.5 + i * 45;
+    const [x, y] = pt(deg, 160);
+    el('circle', { cx: x, cy: y, r: 6.8, fill: '#8d939b' }, screws);
+    const hex = [...Array(6)].map((_, k) => pt(k * 60 + deg, 5.8, x, y).join(',')).join(' ');
+    el('polygon', { points: hex, fill: 'url(#polish)', stroke: '#5c626a', 'stroke-width': .6 }, screws);
+    // 육각 머리의 정렬된 홈
+    const [ax, ay] = pt(deg, 3, x, y), [bx, by] = pt(deg + 180, 3, x, y);
+    el('line', { x1: ax, y1: ay, x2: bx, y2: by, stroke: '#7d838b', 'stroke-width': .5 }, screws);
+  }
+
+  // ---- 플랜지 미닛 트랙 ----
+  const flange = document.getElementById('flange');
+  for (let i = 0; i < 60; i++) {
+    const major = i % 5 === 0;
+    const [x1, y1] = pt(i * 6, 135.5);
+    const [x2, y2] = pt(i * 6, major ? 126 : 129.5);
+    el('line', { x1, y1, x2, y2, stroke: '#e3e8f0', 'stroke-width': major ? 1.3 : .6 }, flange);
+    for (let k = 1; k < 5 && !major; k++) {}
+  }
+  for (let i = 0; i < 300; i++) {
+    if (i % 5 === 0) continue;
+    const [x1, y1] = pt(i * 1.2, 135.5);
+    const [x2, y2] = pt(i * 1.2, 133.5);
+    el('line', { x1, y1, x2, y2, stroke: '#cfd6e2', 'stroke-width': .3 }, flange);
+  }
+
+  // ---- 바 인덱스 (3시는 날짜창) ----
+  const indices = document.getElementById('indices');
+  for (let h = 0; h < 12; h++) {
+    if (h === 3) continue;
+    const g = el('g', { transform: `rotate(${h * 30} ${C} ${C})` }, indices);
+    const xs = h === 0 ? [191.8, 202.2] : [196.8];
+    const w = h === 0 ? 6 : 6.4;
+    xs.forEach(x => {
+      el('rect', { x, y: 84, width: w, height: 27, fill: 'url(#white)', stroke: '#5f6773', 'stroke-width': .4 }, g);
+      el('rect', { x: x + w / 2 - 1.1, y: 87, width: 2.2, height: 21, fill: '#eef4e6' }, g);
+    });
+  }
+
+  document.getElementById('date').textContent = new Date().getDate();
+
+  // ---- 스탑워치 로직 ----
+  const watch = document.getElementById('watch');
+  const display = document.getElementById('display');
+  const startBtn = document.getElementById('startBtn');
+  const lapBtn = document.getElementById('lapBtn');
+  const lapsEl = document.getElementById('laps');
+  const hourHand = document.getElementById('hourHand');
+  const minHand = document.getElementById('minHand');
+  const secHand = document.getElementById('secHand');
+
+  let running = false, startTime = 0, elapsed = 0, lapStart = 0, laps = [];
+
+  function fmt(ms) {
+    const cs = Math.floor(ms / 10) % 100;
+    const s = Math.floor(ms / 1000) % 60;
+    const m = Math.floor(ms / 60000) % 60;
+    const h = Math.floor(ms / 3600000);
+    const p = n => String(n).padStart(2, '0');
+    return (h ? h + ':' : '') + p(m) + ':' + p(s) + '.' + p(cs);
+  }
+  const total = () => running ? elapsed + performance.now() - startTime : elapsed;
+  const rot = (e, deg) => { e.style.transform = `rotate(${deg}deg)`; };
+  const setSec = ms => rot(secHand, (ms % 60000) / 60000 * 360);
+
+  function frame() {
+    const now = new Date();
+    const min = now.getMinutes() + now.getSeconds() / 60;
+    rot(minHand, min * 6);
+    rot(hourHand, (now.getHours() % 12 + min / 60) * 30);
+    if (running) {
+      const t = total();
+      setSec(t);
+      display.textContent = fmt(t);
+      const cur = lapsEl.querySelector('li.current');
+      if (cur) cur.lastChild.textContent = fmt(t - lapStart);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function row(n, ms, cls) {
+    const li = document.createElement('li');
+    if (cls) li.className = cls;
+    const a = document.createElement('span');
+    a.className = 'n';
+    a.textContent = 'LAP ' + n;
+    const b = document.createElement('span');
+    b.textContent = fmt(ms);
+    li.append(a, b);
+    return li;
+  }
+
+  function renderLaps() {
+    lapsEl.innerHTML = '';
+    if (running || elapsed > 0) lapsEl.appendChild(row(laps.length + 1, total() - lapStart, 'current'));
+    let min = -1, max = -1;
+    if (laps.length >= 2) {
+      min = laps.indexOf(Math.min(...laps));
+      max = laps.indexOf(Math.max(...laps));
+    }
+    for (let i = laps.length - 1; i >= 0; i--) {
+      lapsEl.appendChild(row(i + 1, laps[i], i === min ? 'best' : i === max ? 'worst' : ''));
+    }
+  }
+
+  function updateButtons() {
+    startBtn.textContent = running ? 'Stop' : 'Start';
+    lapBtn.textContent = running || elapsed === 0 ? 'Lap' : 'Reset';
+    lapBtn.disabled = !running && elapsed === 0;
+  }
+
+  function toggle() {
+    crown.classList.add('pressed');
+    setTimeout(() => crown.classList.remove('pressed'), 120);
+    watch.classList.remove('flyback');
+    if (running) {
+      elapsed += performance.now() - startTime;
+      running = false;
+      setSec(elapsed);
+      display.textContent = fmt(elapsed);
+    } else {
+      startTime = performance.now();
+      running = true;
+    }
+    updateButtons();
+    renderLaps();
+  }
+
+  function lapOrReset() {
+    if (running) {
+      const t = total();
+      laps.push(t - lapStart);
+      lapStart = t;
+    } else {
+      if (elapsed === 0) return;
+      elapsed = 0; lapStart = 0; laps = [];
+      display.textContent = fmt(0);
+      watch.classList.add('flyback');   // 초침이 0으로 튕겨 돌아감
+      setSec(0);
+      updateButtons();
+    }
+    renderLaps();
+  }
+
+  startBtn.addEventListener('click', toggle);
+  lapBtn.addEventListener('click', lapOrReset);
+  crown.addEventListener('click', toggle);
+
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.key === 'l' || e.key === 'L') { if (running) lapOrReset(); }
+    else if (e.key === 'r' || e.key === 'R') { if (!running) lapOrReset(); }
+  });
+
+  setSec(0);
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
