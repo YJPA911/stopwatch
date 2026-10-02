@@ -1,0 +1,968 @@
+<title>코인도저</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Limelight&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+KR:wght@500;700;900&display=swap">
+<style>
+/* Layout: one-screen casino cabinet — marquee + counters on top, portrait felt table below; single dark world by choice */
+:root {
+  --bg: #12070a;        /* cabinet lacquer, near-black wine */
+  --panel: #2a0d14;
+  --line: #5a2330;
+  --fg: #f8eedc;
+  --muted: #c4a58a;
+  --felt: #0f5a3a;
+  --felt-hi: #167a4f;
+  --brass: #d9a93f;
+  --brass-dk: #8a6418;
+  --win: #ffe08a;
+  --font-display: "Limelight", "Noto Sans KR", Georgia, serif;
+  --font-body: "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: radial-gradient(ellipse at 50% 0%, var(--panel), var(--bg) 70%) var(--bg);
+  color: var(--fg); font-family: var(--font-body);
+  padding-inline: 16px; padding-block: 12px; box-sizing: border-box;
+  user-select: none;
+}
+/* casino floor: slot | pusher | pachinko on wide screens, stacked on narrow ones */
+.floor { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.center { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 480px; }
+.center .wrap { flex: none; height: 78vh; }
+.side { width: 100%; max-width: 480px; }
+@media (min-width: 1000px) {
+  .floor { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(240px, 300px); grid-template-rows: calc(100vh - 24px) auto; align-items: center; gap: 24px; }
+  .center { height: 100%; max-width: none; min-width: 0; }
+  .center .wrap { flex: 1; height: auto; }
+  #slotBox { order: -1; }
+}
+.machine {
+  background: linear-gradient(180deg, var(--panel), var(--bg));
+  border: 2px solid var(--brass-dk); border-radius: 16px; padding: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6), inset 0 0 0 1px rgba(217,169,63,.15);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.machine h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 24px; color: var(--brass); text-align: center; letter-spacing: .04em; text-shadow: 0 0 10px rgba(217,169,63,.4); }
+.machine h2 small { display: block; font-family: var(--font-body); font-size: 10px; letter-spacing: .3em; color: var(--muted); text-shadow: none; }
+.reels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--bg); border: 2px solid var(--brass); border-radius: 10px; padding: 6px; position: relative; }
+.reels::after { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 2px; background: var(--brass); opacity: .35; pointer-events: none; }
+.reel { height: 84px; overflow: hidden; border-radius: 6px; background: linear-gradient(180deg, #cfc4b0, var(--fg) 30%, var(--fg) 70%, #cfc4b0); }
+.strip > div { height: 84px; display: grid; place-items: center; font-family: var(--font-display); font-size: 44px; line-height: 1; }
+.strip > div.bar { font-family: var(--font-mono); font-weight: 700; font-size: 22px; letter-spacing: .04em; }
+.reels.win { animation: flash .25s 6 alternate; }
+@keyframes flash { to { box-shadow: 0 0 24px var(--win); border-color: var(--win); } }
+.msg { min-height: 22px; text-align: center; font-family: var(--font-mono); font-weight: 700; color: var(--win); }
+.controls { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+/* roulette */
+.roulette { grid-column: 1 / -1; width: 100%; max-width: 1100px; justify-self: center; }
+.rbody { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: center; }
+.rwheel { width: min(300px, 100%); aspect-ratio: 1; height: auto; cursor: default; box-shadow: none; background: transparent; touch-action: auto; }
+.rside { flex: 1 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.board-scroll { overflow-x: auto; padding-bottom: 4px; }
+.board {
+  display: grid; grid-template-columns: 36px repeat(12, minmax(30px, 1fr)) 40px; grid-auto-rows: 36px; gap: 2px;
+  min-width: 480px; background: var(--brass-dk); padding: 2px; border-radius: 6px;
+}
+.cell {
+  border: 0; border-radius: 2px; padding: 0; color: var(--fg); background: var(--felt);
+  font: 700 13px var(--font-mono); cursor: pointer; position: relative;
+}
+.cell:hover { filter: brightness(1.2); color: var(--fg); }
+.cell.red { background: #b0101e; }
+.cell.black { background: #1b1b1f; }
+.cell.green { background: #1a7a45; }
+.cell.out { font: 700 12px var(--font-body); }
+.cell[aria-pressed="true"] { outline: 2px solid var(--win); outline-offset: -2px; z-index: 1; }
+.cell.bet::after {
+  content: ""; position: absolute; width: 18px; height: 18px; left: 50%; top: 50%; margin: -9px 0 0 -9px;
+  border-radius: 50%; background: var(--brass); border: 3px dashed var(--bg); box-sizing: border-box;
+}
+.cell.hit { animation: flash .25s 8 alternate; box-shadow: 0 0 14px var(--win); z-index: 2; }
+.rbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); }
+.rbar b { color: var(--fg); font-family: var(--font-mono); }
+.history { display: flex; gap: 4px; flex-wrap: wrap; }
+.history span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 700 11px var(--font-mono); color: var(--fg); }
+#rRandom[aria-pressed="true"] { background: var(--brass); color: var(--bg); border-color: var(--brass); }
+.big {
+  font: 900 16px var(--font-body); letter-spacing: .1em; padding: 10px 18px; border-radius: 999px;
+  background: radial-gradient(circle at 40% 35%, #ff6b6b, #b0101e); color: var(--fg); border: 2px solid var(--brass);
+}
+.big:hover { color: var(--fg); filter: brightness(1.1); }
+.big:disabled { filter: grayscale(.7); opacity: .6; cursor: default; }
+.big[aria-pressed="true"] { background: radial-gradient(circle at 40% 35%, #7be0a0, #1a7a45); }
+.paytable { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+.paytable span:nth-child(even) { text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
+.pachi canvas { height: min(58vh, 420px); width: auto; max-width: 100%; align-self: center; object-fit: contain; cursor: default; touch-action: auto; }
+.flychip {
+  position: fixed; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+  border: 3px dashed var(--fg); box-sizing: border-box; pointer-events: none; z-index: 10;
+  box-shadow: 0 3px 8px rgba(0,0,0,.5);
+}
+#c { touch-action: none; }
+.top { width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { font-family: var(--font-display); font-size: clamp(24px, 7vw, 34px); color: var(--brass); letter-spacing: .04em; line-height: 1; text-shadow: 0 0 12px rgba(217,169,63,.45); }
+.brand small { display: block; font-family: var(--font-body); font-size: 10px; letter-spacing: .3em; color: var(--muted); margin-top: 4px; text-shadow: none; }
+.stats { display: flex; gap: 8px; }
+.stat { background: var(--bg); border: 1px solid var(--brass-dk); border-radius: 6px; padding: 6px 10px; min-width: 68px; text-align: right; }
+.stat .k { font-size: 10px; letter-spacing: .14em; color: var(--muted); }
+.stat .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 20px; line-height: 1.1; color: var(--win); }
+.wrap { flex: 1; min-height: 0; width: 100%; display: flex; justify-content: center; align-items: flex-start; }
+canvas { display: block; border-radius: 14px; background: var(--panel); cursor: crosshair; max-width: 100%; box-shadow: 0 0 0 2px var(--brass-dk), 0 10px 40px rgba(0,0,0,.6); }
+.hint { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.6; max-width: 480px; }
+.hint b { color: var(--fg); }
+.row { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+#refill { color: var(--win); font-family: var(--font-mono); }
+button {
+  font: 700 12px var(--font-body); color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer;
+}
+button:hover { color: var(--fg); border-color: var(--brass-dk); }
+button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+</style>
+
+<main class="floor">
+<div class="center">
+<div class="top">
+  <div class="brand">코인도저<small>ROYAL CHIP PUSHER</small></div>
+  <div class="stats">
+    <div class="stat"><div class="k">보유 칩</div><div class="v" id="wallet">0</div></div>
+    <div class="stat"><div class="k">획득</div><div class="v" id="won">0</div></div>
+  </div>
+</div>
+<div class="wrap" id="wrap"><canvas id="c"></canvas></div>
+<div class="hint">
+  <b>클릭/탭</b>한 위치에 칩 투입 · 누르고 있으면 연속 투입 · <b>←→</b> 이동, <b>Space</b> 투입<br>
+  앞으로 떨어지면 칩 값의 3배, 양옆 홈으로 빠지면 1배를 획득합니다. 보라색 칩은 5칩 값어치.
+  <div class="row">
+    <span id="refill"></span>
+    <button id="sound">소리 켜짐</button>
+    <button id="reset">처음부터</button>
+  </div>
+</div>
+</div>
+
+<section class="side machine" id="slotBox" aria-label="슬롯머신">
+  <h2>LUCKY 7<small>SLOT MACHINE</small></h2>
+  <div class="reels" id="reels">
+    <div class="reel"><div class="strip"></div></div>
+    <div class="reel"><div class="strip"></div></div>
+    <div class="reel"><div class="strip"></div></div>
+  </div>
+  <div class="msg" id="slotMsg">보유 칩으로 자동 베팅 중</div>
+  <div class="controls">
+    <span class="paytable" style="display:block">1회 <span style="color:var(--fg)">5칩</span></span>
+    <button class="big" id="spin" aria-pressed="true">자동 ON</button>
+  </div>
+  <div class="paytable" id="paytable"></div>
+</section>
+
+<section class="side machine pachi" id="pachiBox" aria-label="빠칭코">
+  <h2>PACHI-PACHI<small>PACHINKO · 1칩 = 1구</small></h2>
+  <canvas id="pc"></canvas>
+  <div class="msg" id="pachiMsg">랜덤 위치로 자동 발사 중</div>
+  <div class="controls">
+    <span class="paytable" style="display:block">볼 <span id="balls" style="color:var(--fg)">0</span>개 진행 중</span>
+    <button class="big" id="fire" aria-pressed="true">자동 ON</button>
+  </div>
+</section>
+
+<section class="side machine roulette" id="rouletteBox" aria-label="룰렛">
+  <h2>GRAND ROULETTE<small>EUROPEAN · 1회 5칩 · 자동 베팅</small></h2>
+  <div class="rbody">
+    <canvas class="rwheel" id="rc"></canvas>
+    <div class="rside">
+      <div class="rbar">
+        <span>보유 칩 <b id="rWallet">0</b></span>
+        <span>베팅 위치 <b id="rSelLabel">랜덤</b></span>
+        <span style="display:flex;gap:8px">
+          <button id="rRandom" aria-pressed="true">랜덤 베팅</button>
+          <button class="big" id="rAuto" aria-pressed="true" style="padding:6px 14px;font-size:13px">자동 ON</button>
+        </span>
+      </div>
+      <div class="board-scroll"><div class="board" id="board"></div></div>
+      <div class="msg" id="rMsg" style="text-align:left">칸을 누르면 그 자리에 계속 베팅합니다</div>
+      <div class="rbar">
+        <span>숫자 ×36 · 12구간/세로줄 ×3 · 빨강/검정/홀/짝/구간 ×2 (0이면 꽝)</span>
+        <div class="history" id="history"></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+const W = 480, H = 780;
+const TOP = 40;                   // marquee strip height
+const FL = 34, FR = 446;          // field side walls
+const FY = 724;                   // front drop edge
+const GUTTER = 450;               // side walls end here; below, sides are open gutters
+const R = 18;                     // chip radius
+const FRONT_MULT = 3;             // payout multiplier for chips pushed over the front edge
+const SIDE_MULT = 1;              // payout multiplier for chips falling into a side gutter
+const P_MID = TOP + 140, P_AMP = 48, P_SPEED = 1.35;
+const START_WALLET = 50, REFILL_BELOW = 10, REFILL_SEC = 5;
+const DROP_T = 0.42;              // seconds a chip spends in the air
+const SAVE_KEY = 'coinpusher-v3';
+
+// chip faces: [body, stripe, value]
+const CHIPS = [
+  { body: '#c8202f', stripe: '#f8eedc', val: 1 },
+  { body: '#1f4fb8', stripe: '#f8eedc', val: 1 },
+  { body: '#1b1b1f', stripe: '#d9a93f', val: 1 },
+  { body: '#6b2bb5', stripe: '#ffe08a', val: 5 },   // bonus
+];
+const BONUS = 3;
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = {};
+['--bg','--panel','--line','--fg','--muted','--felt','--felt-hi','--brass','--brass-dk','--win'].forEach(n => C[n.slice(2)] = tok(n));
+
+let chips, wallet, won, t, refillT, fx, sparks, dropping, cursorX = W / 2, cooldown = 0, holding = false;
+let streak = 0, streakT = 0, banner = null, shower = 0, showerT = 0;
+
+const pick = () => Math.random() < 1 / 14 ? BONUS : (Math.random() * 3) | 0;
+const mk = (x, y, k) => ({ x, y, vx: 0, vy: 0, k, a: Math.random() * Math.PI * 2 });
+
+function seedField() {
+  // jittered hex packing so the table starts full
+  chips = [];
+  const sx = 2 * R + 2, sy = sx * 0.87;
+  const y0 = P_MID + P_AMP + R + 4;
+  for (let row = 0, y = y0; y < FY - R - 6; row++, y += sy) {
+    for (let x = FL + R + 1 + (row % 2 ? sx / 2 : 0); x < FR - R; x += sx) {
+      if (Math.random() < 0.08) continue;
+      chips.push(mk(x + (Math.random() - 0.5) * 2, y + (Math.random() - 0.5) * 2, pick()));
+    }
+  }
+}
+
+function newGame() {
+  seedField(); wallet = START_WALLET; won = 0;
+  t = 0; refillT = 0; fx = []; sparks = []; dropping = []; shower = 0;
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (s && Array.isArray(s.chips) && s.chips.length) {
+      chips = s.chips.map(([x, y, k]) => mk(x, y, k | 0));
+      wallet = s.wallet | 0; won = s.won | 0;
+      t = 0; refillT = 0; fx = []; sparks = []; dropping = [];
+      return;
+    }
+  } catch (e) {}
+  newGame();
+}
+function save() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      wallet, won, chips: chips.map(c => [Math.round(c.x), Math.round(c.y), c.k])
+    }));
+  } catch (e) {}
+}
+load();
+setInterval(save, 3000);
+addEventListener('pagehide', save);
+
+// ---------- sound (starts after the first click, as browsers require) ----------
+let actx = null, soundOn = true;
+try { soundOn = localStorage.getItem('coinpusher-sound') !== 'off'; } catch (e) {}
+$('sound').textContent = soundOn ? '소리 켜짐' : '소리 꺼짐';
+function clack(freq, vol, len) {
+  if (!soundOn) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
+    o.type = 'triangle'; o.frequency.setValueAtTime(freq, now);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.5, now + len);
+    g.gain.setValueAtTime(vol, now); g.gain.exponentialRampToValueAtTime(0.0001, now + len);
+    o.connect(g).connect(actx.destination); o.start(now); o.stop(now + len);
+  } catch (e) {}
+}
+$('sound').onclick = () => {
+  soundOn = !soundOn;
+  $('sound').textContent = soundOn ? '소리 켜짐' : '소리 꺼짐';
+  try { localStorage.setItem('coinpusher-sound', soundOn ? 'on' : 'off'); } catch (e) {}
+};
+
+const pusherEdge = tt => P_MID + P_AMP * Math.sin(tt * P_SPEED);
+
+function drop() {
+  if (wallet <= 0 || cooldown > 0) return;
+  wallet--; cooldown = 0.2;
+  const x = Math.max(FL + R, Math.min(FR - R, cursorX + (Math.random() - 0.5) * 6));
+  dropping.push({ x, life: DROP_T, k: pick(), spin: Math.random() * 6 });
+  clack(900, 0.04, 0.05);
+}
+
+function burst(x, y, color, n, speed) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = speed * (0.4 + Math.random());
+    sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - speed * 0.4, life: 0.5 + Math.random() * 0.5, color });
+  }
+}
+
+function step(dt) {
+  t += dt;
+  cooldown = Math.max(0, cooldown - dt);
+  if (holding) drop();
+
+  // side-bonus shower: free chips rain onto the table one after another
+  if (shower > 0) {
+    showerT -= dt;
+    while (shower > 0 && showerT <= 0) {
+      dropping.push({ x: FL + R + Math.random() * (FR - FL - 2 * R), life: DROP_T * (0.8 + Math.random() * 0.6), k: pick(), spin: Math.random() * 6 });
+      shower--; showerT += 0.07;
+    }
+  }
+
+  if (wallet < REFILL_BELOW) {
+    refillT += dt;
+    if (refillT >= REFILL_SEC) { wallet++; refillT = 0; }
+  } else refillT = 0;
+
+  const P = pusherEdge(t);
+  const vp = P_AMP * P_SPEED * Math.cos(t * P_SPEED);
+
+  // landing: ripple + sparks + clack
+  for (const d of dropping) d.life -= dt;
+  for (const d of dropping.filter(d => d.life <= 0)) {
+    const y = P + R + 1;
+    chips.push(Object.assign(mk(d.x, y, d.k), { vy: Math.max(vp, 0) }));
+    fx.push({ type: 'ring', x: d.x, y, life: 0.35 });
+    burst(d.x, y, d.k === BONUS ? CHIPS[BONUS].stripe : C.brass, d.k === BONUS ? 14 : 6, 90);
+    clack(d.k === BONUS ? 520 : 380, 0.12, 0.08);
+  }
+  dropping = dropping.filter(d => d.life > 0);
+
+  const damp = Math.exp(-7 * dt);
+  for (const c of chips) { c.vx *= damp; c.vy *= damp; c.x += c.vx * dt; c.y += c.vy * dt; }
+
+  // position-based contact solve; pusher and walls re-applied each pass so pushes chain through the pile
+  const n = chips.length, D = 2 * R, D2 = D * D;
+  for (let it = 0; it < 7; it++) {
+    for (let i = 0; i < n; i++) {
+      const a = chips[i];
+      for (let j = i + 1; j < n; j++) {
+        const b = chips[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        if (dx > D || dx < -D || dy > D || dy < -D) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= D2 || d2 === 0) continue;
+        const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, ov = D - d;
+        const pa = a.y - R <= P + 0.5, pb = b.y - R <= P + 0.5;
+        const wa = pa && !pb ? 0 : (!pa && pb ? 1 : 0.5);
+        a.x -= nx * ov * wa; a.y -= ny * ov * wa;
+        b.x += nx * ov * (1 - wa); b.y += ny * ov * (1 - wa);
+        if (it === 0) {
+          const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+          if (rv < 0) {
+            const imp = rv * 0.5;
+            a.vx += nx * imp; a.vy += ny * imp; b.vx -= nx * imp; b.vy -= ny * imp;
+          }
+        }
+      }
+    }
+    for (const c of chips) {
+      if (c.y - R < P) { c.y = P + R; if (c.vy < vp) c.vy = Math.max(vp, 0); }
+      if (c.y < GUTTER) {
+        if (c.x < FL + R) { c.x = FL + R; c.vx = Math.abs(c.vx) * 0.2; }
+        if (c.x > FR - R) { c.x = FR - R; c.vx = -Math.abs(c.vx) * 0.2; }
+      }
+    }
+  }
+
+  // payouts: chip tumbles over the lip, flips, sparks and a floating amount
+  chips = chips.filter(c => {
+    if (c.y > FY) {
+      const v = CHIPS[c.k].val * FRONT_MULT;
+      wallet += v; won += v; streak += v; streakT = 1.2;
+      fx.push({ type: 'fall', x: c.x, y: FY, vx: c.vx * 0.3, vy: 40, k: c.k, a: c.a, life: 0.9 });
+      const bonus = c.k === BONUS;
+      fx.push({ type: 'text', x: c.x, y: FY - 10, text: '+' + v, big: bonus, life: 1.1 });
+      burst(c.x, FY, bonus ? CHIPS[BONUS].stripe : C.win, bonus ? 24 : 12, bonus ? 220 : 150);
+      clack(bonus ? 1320 : 1040, 0.08, 0.12);
+      return false;
+    }
+    if (c.x < FL - R * 0.4 || c.x > FR + R * 0.4) {
+      const v = CHIPS[c.k].val * SIDE_MULT, side = c.x < FL ? -1 : 1, gx = side < 0 ? FL / 2 : (FR + W) / 2;
+      wallet += v; won += v; streak += v; streakT = 1.2;
+      fx.push({ type: 'fall', x: c.x, y: c.y, vx: side * 60, vy: 30, k: c.k, a: c.a, life: 0.9 });
+      fx.push({ type: 'text', x: Math.max(40, Math.min(W - 40, gx - side * 30)), y: c.y, text: '+' + v, big: c.k === BONUS, life: 1.1 });
+      burst(gx, c.y, C.win, 8, 120);
+      clack(900, 0.06, 0.1);
+      return false;
+    }
+    return true;
+  });
+
+  if (streakT > 0) {
+    streakT -= dt;
+    if (streakT <= 0) {
+      if (streak >= 8) { banner = { text: streak >= 20 ? 'JACKPOT!' : 'BIG WIN!', amt: streak, life: 2 }; clack(660, 0.1, 0.4); }
+      streak = 0;
+    }
+  }
+  if (banner) { banner.life -= dt; if (banner.life <= 0) banner = null; }
+
+  for (const f of fx) {
+    f.life -= dt;
+    if (f.type === 'fall') { f.vy += 500 * dt; f.x += f.vx * dt; f.y += f.vy * dt; }
+  }
+  fx = fx.filter(f => f.life > 0);
+  for (const s of sparks) { s.vy += 300 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; }
+  sparks = sparks.filter(s => s.life > 0);
+}
+
+// ---------- drawing ----------
+// flip: 1 = flat face-up, 0 = edge-on (squashes vertically for a tumbling look)
+function chip(x, y, r, k, ang, alpha, flip) {
+  const f = CHIPS[k], sq = flip ?? 1;
+  ctx.save();
+  ctx.globalAlpha = alpha ?? 1;
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(0,0,0,.4)';
+  ctx.beginPath(); ctx.ellipse(1.5, 3, r, r * Math.max(0.25, sq), 0, 0, Math.PI * 2); ctx.fill();
+  if (sq < 1) {
+    // chip edge visible while tumbling
+    ctx.fillStyle = f.body;
+    ctx.beginPath(); ctx.ellipse(0, 3 * (1 - sq), r, r * Math.max(0.12, sq), 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.scale(1, Math.max(0.12, sq));
+  ctx.rotate(ang);
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = f.body; ctx.fill();
+  // edge spots
+  ctx.fillStyle = f.stripe;
+  for (let i = 0; i < 6; i++) {
+    const a0 = i * Math.PI / 3;
+    ctx.beginPath(); ctx.arc(0, 0, r, a0 - 0.2, a0 + 0.2); ctx.arc(0, 0, r * 0.74, a0 + 0.2, a0 - 0.2, true); ctx.closePath(); ctx.fill();
+  }
+  // inlay
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.56, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fill();
+  ctx.setLineDash([2.2, 2.2]); ctx.lineWidth = 1; ctx.strokeStyle = f.stripe; ctx.stroke(); ctx.setLineDash([]);
+  if (f.val > 1) {
+    ctx.rotate(-ang);
+    ctx.fillStyle = f.stripe; ctx.font = '700 ' + Math.round(r * 0.75) + 'px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('5', 0, 0.5);
+  }
+  ctx.beginPath(); ctx.arc(0, 0, r - 0.5, 0, Math.PI * 2);
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  const P = pusherEdge(t);
+  ctx.fillStyle = C.panel; ctx.fillRect(0, 0, W, H);
+
+  // marquee lights
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, TOP);
+  const phase = Math.floor(t * 6);
+  for (let i = 0, x = 14; x < W; i++, x += 22) {
+    const on = (i + phase) % 3 === 0;
+    ctx.beginPath(); ctx.arc(x, TOP / 2, 5, 0, Math.PI * 2);
+    ctx.fillStyle = on ? C.win : C['brass-dk']; ctx.shadowColor = C.win; ctx.shadowBlur = on ? 10 : 0; ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+
+  // side bonus gutters
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, GUTTER, FL, FY - GUTTER); ctx.fillRect(FR, GUTTER, W - FR, FY - GUTTER);
+  ctx.save();
+  ctx.fillStyle = CHIPS[BONUS].stripe; ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 4) ** 2;
+  ctx.font = '700 12px "JetBrains Mono", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const [gx, rot] of [[FL / 2, -Math.PI / 2], [(FR + W) / 2, Math.PI / 2]]) {
+    ctx.save(); ctx.translate(gx, (GUTTER + FY) / 2); ctx.rotate(rot); ctx.fillText('SIDE ×' + SIDE_MULT, 0, 0); ctx.restore();
+  }
+  ctx.restore();
+  // felt with spotlight
+  ctx.fillStyle = C.felt; ctx.fillRect(FL, TOP, FR - FL, FY - TOP);
+  const g = ctx.createRadialGradient(W / 2, FY - 160, 20, W / 2, FY - 160, 360);
+  g.addColorStop(0, C['felt-hi']); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(FL, TOP, FR - FL, FY - TOP);
+  // felt print
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.strokeStyle = C.win; ctx.fillStyle = C.win;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(W / 2, FY - 150, 120, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+  ctx.font = '28px Limelight, serif'; ctx.textAlign = 'center'; ctx.fillText('ROYAL', W / 2, FY - 160);
+  ctx.font = '700 11px "Noto Sans KR", sans-serif'; ctx.fillText('PUSH  ·  WIN  ·  REPEAT', W / 2, FY - 136);
+  ctx.restore();
+  // brass rails
+  ctx.fillStyle = C.brass;
+  ctx.fillRect(FL - 6, TOP, 6, GUTTER - TOP); ctx.fillRect(FR, TOP, 6, GUTTER - TOP);
+  // payout tray
+  ctx.fillStyle = C.bg; ctx.fillRect(0, FY, W, H - FY);
+  ctx.fillStyle = C.brass; ctx.fillRect(FL, FY - 2, FR - FL, 4);
+  ctx.fillStyle = C.muted; ctx.font = '700 12px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('PAYOUT ×' + FRONT_MULT, W / 2, FY + 36);
+
+  for (const c of chips) chip(c.x, c.y, R, c.k, c.a);
+
+  // pusher: lacquered slab with brass trim
+  ctx.fillStyle = C.line; ctx.fillRect(FL - 6, TOP, FR - FL + 12, P - TOP);
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  for (let y = P - 16; y > TOP; y -= 16) ctx.fillRect(FL - 6, y, FR - FL + 12, 2);
+  ctx.fillStyle = C.brass; ctx.fillRect(FL - 6, P - 5, FR - FL + 12, 5);
+
+  // aim marker
+  ctx.fillStyle = C.win;
+  ctx.beginPath(); ctx.moveTo(cursorX - 9, P - 28); ctx.lineTo(cursorX + 9, P - 28); ctx.lineTo(cursorX, P - 14); ctx.closePath(); ctx.fill();
+
+  // chips in the air: fall from above the shelf, spinning and flipping
+  for (const d of dropping) {
+    const k = d.life / DROP_T;                    // 1 → 0
+    const y = P + R + 1 - k * k * 90;
+    const flip = Math.abs(Math.cos(k * 7 + d.spin));
+    chip(d.x, y, R * (1 + k * 0.45), d.k, d.spin + k * 8, 1, Math.max(0.2, flip));
+  }
+
+  for (const f of fx) {
+    if (f.type === 'ring') {
+      const k = 1 - f.life / 0.35;
+      ctx.beginPath(); ctx.arc(f.x, f.y, R + k * 18, 0, Math.PI * 2);
+      ctx.strokeStyle = C.win; ctx.globalAlpha = 1 - k; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1;
+    } else if (f.type === 'fall') {
+      chip(f.x, f.y, R, f.k, f.a + (0.9 - f.life) * 6, Math.min(1, f.life * 2), Math.abs(Math.cos((0.9 - f.life) * 9)));
+    } else if (f.type === 'text') {
+      ctx.globalAlpha = Math.min(1, f.life * 1.5);
+      ctx.fillStyle = f.big ? CHIPS[BONUS].stripe : C.win;
+      ctx.font = (f.big ? 30 : 22) + 'px Limelight, serif'; ctx.textAlign = 'center';
+      ctx.fillText(f.text, f.x, f.y - (1.1 - f.life) * 50);
+      ctx.globalAlpha = 1;
+    }
+  }
+  for (const s of sparks) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, s.life * 2));
+    ctx.fillStyle = s.color; ctx.fillRect(s.x - 1.5, s.y - 1.5, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+
+  if (banner) {
+    const a = Math.min(1, banner.life * 2), pop = 1 + Math.max(0, banner.life - 1.6) * 0.8;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, H * 0.42); ctx.scale(pop, pop);
+    ctx.fillStyle = 'rgba(18,7,10,.75)'; ctx.fillRect(-170, -48, 340, 96);
+    ctx.strokeStyle = C.brass; ctx.lineWidth = 2; ctx.strokeRect(-170, -48, 340, 96);
+    ctx.fillStyle = C.win; ctx.textAlign = 'center'; ctx.shadowColor = C.brass; ctx.shadowBlur = 16;
+    ctx.font = '40px Limelight, serif'; ctx.fillText(banner.text, 0, 6);
+    ctx.shadowBlur = 0; ctx.font = '700 16px "JetBrains Mono", monospace'; ctx.fillText('+' + banner.amt + ' 칩', 0, 34);
+    ctx.restore();
+  }
+
+  $('wallet').textContent = wallet;
+  $('won').textContent = won;
+  $('refill').textContent = wallet < REFILL_BELOW ? '무료 칩 ' + Math.ceil(REFILL_SEC - refillT) + '초 후' : '';
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  step(dt / 2); step(dt / 2);
+  pachiStep(dt); pachiDraw();
+  rTick(dt); rDraw();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function resize() {
+  const r = $('wrap').getBoundingClientRect();
+  const scale = Math.max(0.3, Math.min(r.width / W, r.height / H));
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = W * scale + 'px'; cv.style.height = H * scale + 'px';
+  cv.width = Math.round(W * scale * dpr); cv.height = Math.round(H * scale * dpr);
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+}
+addEventListener('resize', resize);
+
+const clampX = x => Math.max(FL + R, Math.min(FR - R, x));
+function toX(e) { const b = cv.getBoundingClientRect(); return (e.clientX - b.left) * W / b.width; }
+cv.addEventListener('pointermove', e => { cursorX = clampX(toX(e)); });
+cv.addEventListener('pointerdown', e => { cursorX = clampX(toX(e)); holding = true; cv.setPointerCapture(e.pointerId); drop(); });
+addEventListener('pointerup', () => { holding = false; });
+addEventListener('pointercancel', () => { holding = false; });
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('button, input')) return;   // leave keys to the focused control
+  if (e.key === 'ArrowLeft') { cursorX = clampX(cursorX - 18); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { cursorX = clampX(cursorX + 18); e.preventDefault(); }
+  if (e.key === ' ') { holding = true; e.preventDefault(); }
+});
+addEventListener('keyup', e => { if (e.key === ' ') holding = false; });
+addEventListener('blur', () => { holding = false; });
+
+// two-step reset: confirm() is unavailable in the viewer
+let armed = null;
+$('reset').onclick = () => {
+  if (armed) { clearTimeout(armed); armed = null; newGame(); save(); $('reset').textContent = '처음부터'; return; }
+  $('reset').textContent = '한 번 더 누르면 초기화';
+  armed = setTimeout(() => { armed = null; $('reset').textContent = '처음부터'; }, 2500);
+};
+
+// ---------- slot machine (left) ----------
+const SYM = [
+  { s: '♣', w: 4, pay: 8, c: '#1a7a45' },
+  { s: '♦', w: 4, pay: 8, c: '#1f4fb8' },
+  { s: '♥', w: 3, pay: 15, c: '#c8202f' },
+  { s: '★', w: 2, pay: 30, c: '#b07a10' },
+  { s: 'BAR', w: 2, pay: 50, c: '#1b1b1f', bar: true },
+  { s: '7', w: 1, pay: 200, c: '#c8202f' },
+];
+const SEVEN = 5, SLOT_SHOWER = 30, REEL_H = 84;
+const WSUM = SYM.reduce((a, s) => a + s.w, 0);
+function pickSym() { let r = Math.random() * WSUM; for (let i = 0; i < SYM.length; i++) { r -= SYM[i].w; if (r < 0) return i; } return 0; }
+function symEl(i) {
+  const d = document.createElement('div');
+  d.textContent = SYM[i].s; d.style.color = SYM[i].c;
+  if (SYM[i].bar) d.className = 'bar';
+  return d;
+}
+const strips = [...document.querySelectorAll('#reels .strip')];
+const bet = 5;
+let spinning = false, cur = [pickSym(), pickSym(), pickSym()];
+strips.forEach((st, i) => st.appendChild(symEl(cur[i])));
+$('paytable').innerHTML = SYM.slice().reverse().map(s =>
+  `<span>${s.s} ${s.s} ${s.s}</span><span>×${s.pay}${s.pay === 200 ? ' + 칩 샤워' : ''}</span>`).join('') +
+  '<span>왼쪽 두 개 같음</span><span>×2</span>';
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// chips physically fly between the wallet counter and the side machines
+const center = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+function fly(from, to, n, done) {
+  n = Math.max(1, Math.min(n, 6));
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div'), f = CHIPS[(Math.random() * 3) | 0];
+    el.className = 'flychip'; el.style.background = f.body;
+    el.style.transform = `translate(${from.x}px, ${from.y}px)`;
+    document.body.appendChild(el);
+    const mx = (from.x + to.x) / 2, my = Math.min(from.y, to.y) - 90;
+    const anim = el.animate([
+      { transform: `translate(${from.x}px, ${from.y}px) rotate(0deg) scale(1)` },
+      { transform: `translate(${mx}px, ${my}px) rotate(360deg) scale(1.35)`, offset: 0.5 },
+      { transform: `translate(${to.x}px, ${to.y}px) rotate(720deg) scale(.8)` },
+    ], { duration: reduceMotion ? 150 : 620, delay: i * 70, easing: 'ease-in-out', fill: 'forwards' });
+    anim.onfinish = () => { el.remove(); if (i === n - 1 && done) done(); };
+  }
+}
+
+let slotAuto = true, slotPending = false, slotWait = 0.5;
+function slotTick(dt) {
+  if (!slotAuto || spinning || slotPending) return;
+  slotWait -= dt;
+  if (slotWait > 0) return;
+  if (wallet < bet) { $('slotMsg').textContent = '칩이 모자라 대기 중 (베팅 ' + bet + ')'; slotWait = 1; return; }
+  wallet -= bet; slotPending = true;
+  $('slotMsg').textContent = bet + '칩 베팅';
+  fly(center($('wallet')), center($('reels')), bet, () => { slotPending = false; spin(); });
+}
+$('spin').onclick = () => {
+  slotAuto = !slotAuto;
+  $('spin').setAttribute('aria-pressed', slotAuto);
+  $('spin').textContent = slotAuto ? '자동 ON' : '자동 OFF';
+  if (!slotAuto && !spinning) $('slotMsg').textContent = '자동 베팅 정지';
+};
+
+function spin() {
+  spinning = true;
+  $('reels').classList.remove('win');
+  const res = [pickSym(), pickSym(), pickSym()];
+  let lastStop = 0;
+  strips.forEach((st, i) => {
+    const list = [cur[i]];
+    for (let n = 0; n < 14 + i * 7; n++) list.push(pickSym());
+    list.push(res[i]);
+    st.textContent = ''; list.forEach(k => st.appendChild(symEl(k)));
+    st.style.transition = 'none'; st.style.transform = 'translateY(0)';
+    st.offsetHeight; // commit start position before animating
+    const dur = reduceMotion ? 0.2 + i * 0.1 : 0.9 + i * 0.45;
+    st.style.transition = `transform ${dur}s cubic-bezier(.12,.75,.25,1.04)`;
+    st.style.transform = `translateY(${-(list.length - 1) * REEL_H}px)`;
+    setTimeout(() => clack(320, 0.12, 0.09), dur * 1000);
+    lastStop = dur;
+  });
+  setTimeout(() => finishSpin(res), lastStop * 1000 + 80);
+}
+function finishSpin(res) {
+  cur = res; spinning = false; slotWait = 0.6;
+  let mult = 0;
+  if (res[0] === res[1] && res[1] === res[2]) mult = SYM[res[0]].pay;
+  else if (res[0] === res[1]) mult = 2;
+  const pay = bet * mult;
+  if (!pay) { $('slotMsg').textContent = '꽝!'; return; }
+  slotWait = 1.2;
+  fly(center($('reels')), center($('wallet')), Math.ceil(pay / 5), () => { wallet += pay; });
+  $('reels').classList.add('win');
+  $('slotMsg').textContent = '+' + pay + ' 칩 (×' + mult + ')';
+  clack(880, 0.1, 0.2); setTimeout(() => clack(1320, 0.1, 0.25), 120);
+  if (res[0] === SEVEN && mult > 2) {
+    shower += SLOT_SHOWER; if (showerT < 0) showerT = 0;
+    banner = { text: '777 JACKPOT!', amt: pay, life: 2.5 };
+    $('slotMsg').textContent += ' · 테이블에 칩 ' + SLOT_SHOWER + '개!';
+  }
+}
+
+// ---------- pachinko (right) ----------
+const PW = 240, PH = 400, BR = 4.5, PR = 2.6, PG = 520;
+const pc = $('pc'), pctx = pc.getContext('2d');
+pc.width = PW * 2; pc.height = PH * 2; pctx.scale(2, 2);
+const pins = [];
+for (let r = 0; r < 11; r++) {
+  const y = 78 + r * 22;
+  for (let x = 17 + (r % 2 ? 11 : 0); x < PW - 12; x += 22) pins.push({ x, y });
+}
+const POCKET_Y = PH - 40;
+const pockets = [];
+[[32, 2], [41, 0], [30, 1], [22, 10], [30, 1], [41, 0], [32, 2]].reduce((x, [w, m]) => {
+  pockets.push({ x0: x, x1: x + w, m, star: m === 10 }); return x + w;
+}, 6);
+let balls = [], ptexts = [], fireOn = true, fireT = 0.8, pachiStars = 0, lastEntry = PW / 2;
+
+// canvas coordinates → screen point, for chip flights in and out of the board
+function pachiPoint(x, y) {
+  const r = pc.getBoundingClientRect();
+  return { x: r.left + x / PW * r.width, y: r.top + y / PH * r.height };
+}
+function fireBall() {
+  if (wallet <= 0) { $('pachiMsg').textContent = '칩이 없어 대기 중'; return; }
+  wallet--;
+  const x = 12 + Math.random() * (PW - 24);
+  fly(center($('wallet')), pachiPoint(x, 14), 1, () => {
+    lastEntry = x;
+    balls.push({ x, y: 22, vx: (Math.random() - 0.5) * 40, vy: 30 });
+    clack(1500, 0.03, 0.03);
+  });
+}
+$('fire').onclick = () => {
+  fireOn = !fireOn; $('fire').setAttribute('aria-pressed', fireOn);
+  $('fire').textContent = fireOn ? '자동 ON' : '자동 OFF';
+  $('pachiMsg').textContent = fireOn ? '랜덤 위치로 자동 발사 중' : '자동 발사 정지';
+};
+
+function pachiStep(dt) {
+  slotTick(dt);
+  if (fireOn) { fireT -= dt; if (fireT <= 0) { fireBall(); fireT = 0.55; } }
+  const sub = 4, h = dt / sub;
+  for (let s = 0; s < sub; s++) {
+    for (const b of balls) {
+      b.vy += PG * h; b.x += b.vx * h; b.y += b.vy * h;
+      if (b.x < 6 + BR) { b.x = 6 + BR; b.vx = Math.abs(b.vx) * 0.5; }
+      if (b.x > PW - 6 - BR) { b.x = PW - 6 - BR; b.vx = -Math.abs(b.vx) * 0.5; }
+      if (b.y < POCKET_Y) {
+        for (const p of pins) {
+          const dx = b.x - p.x, dy = b.y - p.y, rr = BR + PR;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= rr * rr || d2 === 0) continue;
+          const d = Math.sqrt(d2), nx = dx / d, ny = dy / d;
+          b.x = p.x + nx * rr; b.y = p.y + ny * rr;
+          const vn = b.vx * nx + b.vy * ny;
+          if (vn < 0) { b.vx -= 1.5 * vn * nx; b.vy -= 1.5 * vn * ny; b.vx += (Math.random() - 0.5) * 24; }
+        }
+      }
+    }
+  }
+  balls = balls.filter(b => {
+    if (b.y < PH - 26) return true;
+    const p = pockets.find(p => b.x >= p.x0 && b.x < p.x1) || pockets[0];
+    if (p.m) {
+      const m = p.m;
+      fly(pachiPoint(b.x, POCKET_Y), center($('wallet')), m > 1 ? 3 : 1, () => { wallet += m; });
+      ptexts.push({ x: b.x, y: POCKET_Y - 6, text: '+' + p.m, life: 1, star: p.star });
+    }
+    if (p.star) {
+      pachiStars++;
+      shower += 10; if (showerT < 0) showerT = 0;
+      $('pachiMsg').textContent = '★ 대박! +10칩, 테이블에 칩 10개 (★ ' + pachiStars + '회)';
+      clack(990, 0.1, 0.3);
+    } else if (p.m) clack(700, 0.05, 0.08);
+    return false;
+  });
+  for (const t of ptexts) t.life -= dt;
+  ptexts = ptexts.filter(t => t.life > 0);
+  $('balls').textContent = balls.length;
+}
+
+function pachiDraw() {
+  const g = pctx.createLinearGradient(0, 0, 0, PH);
+  g.addColorStop(0, C.panel); g.addColorStop(1, C.bg);
+  pctx.fillStyle = g; pctx.fillRect(0, 0, PW, PH);
+  // top arc rail and launch marker
+  pctx.strokeStyle = C.brass; pctx.lineWidth = 3;
+  pctx.beginPath(); pctx.moveTo(4, 60); pctx.quadraticCurveTo(4, 4, 60, 4); pctx.lineTo(PW - 60, 4); pctx.quadraticCurveTo(PW - 4, 4, PW - 4, 60); pctx.lineTo(PW - 4, PH); pctx.moveTo(4, 60); pctx.lineTo(4, PH); pctx.stroke();
+  const lx = lastEntry;
+  pctx.fillStyle = C.win;
+  pctx.beginPath(); pctx.moveTo(lx - 6, 10); pctx.lineTo(lx + 6, 10); pctx.lineTo(lx, 18); pctx.closePath(); pctx.fill();
+  // center ornament
+  pctx.save(); pctx.translate(PW / 2, 150); pctx.rotate(t * 0.6);
+  pctx.strokeStyle = 'rgba(217,169,63,.25)'; pctx.lineWidth = 1;
+  for (let i = 0; i < 8; i++) { pctx.rotate(Math.PI / 4); pctx.beginPath(); pctx.moveTo(0, 0); pctx.lineTo(0, 40); pctx.stroke(); }
+  pctx.restore();
+  // pins
+  pctx.fillStyle = C.brass;
+  for (const p of pins) { pctx.beginPath(); pctx.arc(p.x, p.y, PR, 0, Math.PI * 2); pctx.fill(); }
+  // pockets
+  pctx.textAlign = 'center'; pctx.textBaseline = 'middle';
+  for (const p of pockets) {
+    pctx.fillStyle = p.star ? '#6b2bb5' : p.m ? C.felt : 'rgba(0,0,0,.35)';
+    pctx.fillRect(p.x0 + 1, POCKET_Y, p.x1 - p.x0 - 2, PH - POCKET_Y);
+    pctx.fillStyle = p.star ? C.win : p.m ? C.fg : C.muted;
+    pctx.font = (p.star ? '700 11px' : '700 10px') + ' "JetBrains Mono", monospace';
+    pctx.fillText(p.star ? '★' : p.m ? '×' + p.m : 'OUT', (p.x0 + p.x1) / 2, POCKET_Y + 14);
+    if (p.star) pctx.fillText('10', (p.x0 + p.x1) / 2, POCKET_Y + 28);
+  }
+  pctx.fillStyle = C.brass;
+  for (const p of pockets) pctx.fillRect(p.x0 - 1, POCKET_Y - 6, 2, PH - POCKET_Y + 6);
+  // balls
+  for (const b of balls) {
+    const bg = pctx.createRadialGradient(b.x - 1.5, b.y - 1.5, 0.5, b.x, b.y, BR);
+    bg.addColorStop(0, '#ffffff'); bg.addColorStop(1, '#8a93a2');
+    pctx.fillStyle = bg; pctx.beginPath(); pctx.arc(b.x, b.y, BR, 0, Math.PI * 2); pctx.fill();
+  }
+  for (const tx of ptexts) {
+    pctx.globalAlpha = Math.min(1, tx.life * 2);
+    pctx.fillStyle = tx.star ? C.win : C.fg;
+    pctx.font = (tx.star ? '22px' : '14px') + ' Limelight, serif';
+    pctx.fillText(tx.text, tx.x, tx.y - (1 - tx.life) * 30);
+  }
+  pctx.globalAlpha = 1;
+}
+
+// ---------- roulette (bottom) ----------
+const R_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+const REDS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const R_BET = 5, RS = 300, SEG = Math.PI * 2 / 37;
+const rc = $('rc'), rctx = rc.getContext('2d');
+rc.width = RS * 2; rc.height = RS * 2; rctx.scale(2, 2);
+const numColor = n => n === 0 ? '#1a7a45' : REDS.has(n) ? '#b0101e' : '#1b1b1f';
+
+// bet key → [label, return multiplier incl. stake, test]
+const BETS = {
+  red: ['빨강', 2, n => REDS.has(n)], black: ['검정', 2, n => n > 0 && !REDS.has(n)],
+  odd: ['홀', 2, n => n % 2 === 1], even: ['짝', 2, n => n > 0 && n % 2 === 0],
+  low: ['1–18', 2, n => n >= 1 && n <= 18], high: ['19–36', 2, n => n >= 19],
+  d1: ['1st 12', 3, n => n >= 1 && n <= 12], d2: ['2nd 12', 3, n => n >= 13 && n <= 24], d3: ['3rd 12', 3, n => n >= 25],
+  c1: ['세로줄 1', 3, n => n > 0 && n % 3 === 1], c2: ['세로줄 2', 3, n => n > 0 && n % 3 === 2], c3: ['세로줄 3', 3, n => n > 0 && n % 3 === 0],
+};
+for (let n = 0; n <= 36; n++) BETS['n' + n] = [String(n), 36, k => k === n];
+const BET_KEYS = Object.keys(BETS);
+
+// board: 0 | 3×12 numbers | 2:1 columns, then dozens and even-money rows
+const board = $('board'), cells = {};
+function addCell(key, text, col, row, cls) {
+  const b = document.createElement('button');
+  b.className = 'cell ' + (cls || ''); b.textContent = text; b.dataset.key = key;
+  b.style.gridColumn = col; b.style.gridRow = row; b.setAttribute('aria-pressed', 'false');
+  board.appendChild(b); cells[key] = b;
+}
+addCell('n0', '0', '1', '1 / span 3', 'green');
+for (let c = 0; c < 12; c++) for (let r = 0; r < 3; r++) {
+  const n = c * 3 + (3 - r);
+  addCell('n' + n, n, String(c + 2), String(r + 1), REDS.has(n) ? 'red' : 'black');
+}
+addCell('c3', '2:1', '14', '1', 'out'); addCell('c2', '2:1', '14', '2', 'out'); addCell('c1', '2:1', '14', '3', 'out');
+addCell('d1', '1st 12', '2 / span 4', '4', 'out'); addCell('d2', '2nd 12', '6 / span 4', '4', 'out'); addCell('d3', '3rd 12', '10 / span 4', '4', 'out');
+[['low', '1–18'], ['even', '짝'], ['red', '빨강', 'red'], ['black', '검정', 'black'], ['odd', '홀'], ['high', '19–36']]
+  .forEach(([k, txt, cls], i) => addCell(k, txt, (2 + i * 2) + ' / span 2', '5', 'out ' + (cls || '')));
+
+let rSel = 'random', rAuto = true, rPhase = 'wait', rT = 1.2, rAngle = 0, rSpin = null, rBetKey = null, rBall = null, rHist = [];
+function setSel(key) {
+  rSel = key;
+  for (const k in cells) cells[k].setAttribute('aria-pressed', k === key);
+  $('rRandom').setAttribute('aria-pressed', key === 'random');
+  $('rSelLabel').textContent = key === 'random' ? '랜덤' : BETS[key][0];
+}
+board.addEventListener('click', e => { const b = e.target.closest('.cell'); if (b) setSel(b.dataset.key); });
+$('rRandom').onclick = () => setSel('random');
+$('rAuto').onclick = () => {
+  rAuto = !rAuto; $('rAuto').setAttribute('aria-pressed', rAuto);
+  $('rAuto').textContent = rAuto ? '자동 ON' : '자동 OFF';
+};
+
+function rTick(dt) {
+  if (rPhase === 'wait') {
+    rT -= dt;
+    if (rT > 0 || !rAuto) return;
+    if (wallet < R_BET) { $('rMsg').textContent = '칩이 모자라 대기 중 (1회 5칩)'; rT = 1; return; }
+    wallet -= R_BET;
+    rBetKey = rSel === 'random' ? BET_KEYS[(Math.random() * BET_KEYS.length) | 0] : rSel;
+    for (const k in cells) cells[k].classList.remove('bet', 'hit');
+    rPhase = 'betting';
+    $('rMsg').textContent = BETS[rBetKey][0] + '에 5칩 베팅';
+    fly(center($('rWallet')), center(cells[rBetKey]), 5, () => {
+      cells[rBetKey].classList.add('bet');
+      const result = R_ORDER[(Math.random() * 37) | 0], idx = R_ORDER.indexOf(result);
+      const w1 = rAngle + Math.PI * 4 + Math.random() * Math.PI * 2;
+      const b1 = w1 + idx * SEG;
+      rSpin = { t: 0, dur: reduceMotion ? 1 : 4.5, w0: rAngle, w1, b0: b1 + Math.PI * 8, b1, result };
+      rPhase = 'spinning'; $('rMsg').textContent = '돌아갑니다…';
+      clack(220, 0.08, 0.3);
+    });
+  } else if (rPhase === 'spinning') {
+    const s = rSpin; s.t += dt;
+    const p = Math.min(1, s.t / s.dur), e = 1 - (1 - p) ** 3;
+    rAngle = s.w0 + (s.w1 - s.w0) * e;
+    const ba = s.b0 + (s.b1 - s.b0) * (1 - (1 - p) ** 2.4);
+    const drop = Math.min(1, Math.max(0, (p - 0.55) / 0.35));
+    const wob = p > 0.55 && p < 0.92 ? Math.sin(p * 90) * 4 * (1 - drop) : 0;
+    rBall = { a: ba, r: 128 - drop * 30 + wob };
+    if (p >= 1) {
+      const n = s.result, [label, mult, test] = BETS[rBetKey];
+      rHist.unshift(n); rHist = rHist.slice(0, 12);
+      $('history').innerHTML = rHist.map(k => `<span style="background:${numColor(k)}">${k}</span>`).join('');
+      cells['n' + n].classList.add('hit');
+      if (test(n)) {
+        const pay = R_BET * mult;
+        $('rMsg').textContent = n + ' 당첨! ' + label + ' → +' + pay + '칩';
+        fly(center(cells[rBetKey]), center($('rWallet')), Math.min(6, mult), () => { wallet += pay; });
+        clack(880, 0.1, 0.2); setTimeout(() => clack(1320, 0.1, 0.25), 120);
+        if (mult === 36) banner = { text: 'ROULETTE ' + n + '!', amt: pay, life: 2.5 };
+      } else {
+        $('rMsg').textContent = n + ' — ' + label + ' 꽝';
+      }
+      cells[rBetKey].classList.remove('bet');
+      rPhase = 'wait'; rT = 2.4;
+    }
+  }
+}
+
+function rDraw() {
+  const cx = RS / 2, cy = RS / 2;
+  rctx.clearRect(0, 0, RS, RS);
+  // wooden rim
+  rctx.beginPath(); rctx.arc(cx, cy, 148, 0, Math.PI * 2); rctx.fillStyle = C['brass-dk']; rctx.fill();
+  rctx.beginPath(); rctx.arc(cx, cy, 140, 0, Math.PI * 2); rctx.fillStyle = '#3a1a10'; rctx.fill();
+  // ball track
+  rctx.beginPath(); rctx.arc(cx, cy, 136, 0, Math.PI * 2); rctx.fillStyle = '#5a2e1a'; rctx.fill();
+  rctx.save(); rctx.translate(cx, cy); rctx.rotate(rAngle);
+  for (let i = 0; i < 37; i++) {
+    const a0 = i * SEG - SEG / 2 - Math.PI / 2;
+    rctx.beginPath(); rctx.moveTo(0, 0); rctx.arc(0, 0, 118, a0, a0 + SEG); rctx.closePath();
+    rctx.fillStyle = numColor(R_ORDER[i]); rctx.fill();
+    rctx.strokeStyle = C.brass; rctx.lineWidth = 0.8; rctx.stroke();
+  }
+  rctx.fillStyle = C.fg; rctx.font = '700 10px "JetBrains Mono", monospace'; rctx.textAlign = 'center'; rctx.textBaseline = 'middle';
+  for (let i = 0; i < 37; i++) {
+    rctx.save(); rctx.rotate(i * SEG); rctx.fillText(R_ORDER[i], 0, -106); rctx.restore();
+  }
+  // pocket ring + cone
+  rctx.beginPath(); rctx.arc(0, 0, 94, 0, Math.PI * 2); rctx.strokeStyle = C.brass; rctx.lineWidth = 1.5; rctx.stroke();
+  const cone = rctx.createRadialGradient(-10, -10, 4, 0, 0, 80);
+  cone.addColorStop(0, '#8a4a2a'); cone.addColorStop(1, '#3a1a10');
+  rctx.beginPath(); rctx.arc(0, 0, 80, 0, Math.PI * 2); rctx.fillStyle = cone; rctx.fill();
+  rctx.strokeStyle = C.brass; rctx.lineWidth = 4;
+  for (let i = 0; i < 4; i++) { rctx.rotate(Math.PI / 2); rctx.beginPath(); rctx.moveTo(0, 0); rctx.lineTo(0, 34); rctx.stroke(); }
+  rctx.beginPath(); rctx.arc(0, 0, 10, 0, Math.PI * 2); rctx.fillStyle = C.brass; rctx.fill();
+  rctx.restore();
+  // ball (world angle; rests in its pocket and turns with the wheel afterwards)
+  if (rBall) {
+    if (rPhase !== 'spinning' && rSpin) rBall.a = rAngle + R_ORDER.indexOf(rSpin.result) * SEG;
+    const x = cx + rBall.r * Math.cos(rBall.a - Math.PI / 2), y = cy + rBall.r * Math.sin(rBall.a - Math.PI / 2);
+    const g = rctx.createRadialGradient(x - 1.5, y - 1.5, 0.5, x, y, 6);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#a8b0bc');
+    rctx.beginPath(); rctx.arc(x, y, 5.5, 0, Math.PI * 2); rctx.fillStyle = g; rctx.fill();
+  }
+  $('rWallet').textContent = wallet;
+}
+setSel('random');
+
+resize();
+requestAnimationFrame(loop);
+</script>
